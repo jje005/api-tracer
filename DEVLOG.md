@@ -5,6 +5,32 @@
 
 ---
 
+## 2026-04-13 — 세션 4
+
+### 작업 내용
+
+#### 1. API 응답 타입 통일
+- **신규**: `src/lib/apiResponse.ts`
+  - `apiError.badRequest/notFound/conflict/internal/badGateway` — 상태 코드별 에러 헬퍼
+  - `apiSuccess.ok/created` — 성공 응답 헬퍼
+  - `getErrorMessage(unknown)` — `e instanceof Error ? e.message : String(e)` 반복 제거
+- **변경 파일 (21개 API route)**: 모든 `NextResponse.json({ error })` → `apiError.*`, `NextResponse.json(data)` → `apiSuccess.*`, 에러 추출 → `getErrorMessage`로 일관화
+
+#### 2. 에러 바운더리 적용
+- **신규**: `src/components/ErrorBoundary.tsx`
+  - `ErrorBoundary`: React 클래스 컴포넌트, 기본 폴백 UI + 커스텀 fallback prop
+  - `PageErrorFallback`: 페이지 전체 에러용 폴백 컴포넌트
+- **신규**: `src/app/error.tsx` + 7개 route segment `error.tsx`
+  - modules, projects, coverage, diff, tc, recommendations, upload
+- **변경**: `src/app/modules/[moduleId]/page.tsx` — `ApiExplorer`를 `ErrorBoundary`로 감쌈
+- **변경**: `src/app/diff/page.tsx` — `DiffTable`을 `ErrorBoundary`로 감쌈
+
+#### 3. CLAUDE.md / git 관리
+- CLAUDE.md에 로컬 메모리(프로젝트 현황, 아키텍처 규칙, 사용자 프로필) 통합 → 다른 PC에서도 동일 컨텍스트 유지
+- GitHub 첫 push 완료 (기능 단위 19개 커밋)
+
+---
+
 ## 2026-04-10 — 세션 3
 
 ### 작업 내용
