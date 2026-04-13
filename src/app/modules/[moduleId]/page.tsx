@@ -23,6 +23,17 @@ interface PageProps {
 
 export const dynamic = "force-dynamic";
 
+// 제외 규칙 적용 헬퍼 — 클래스명 패턴 매칭 (와일드카드 지원)
+// "com.example.*" → com.example 패키지 하위 모든 클래스 제외
+// Java의 Pattern.matches()와 유사하지만 단순 prefix 방식 사용
+function matchesExcludeClass(apiClassName: string, ruleClassName: string): boolean {
+  if (ruleClassName.endsWith(".*")) {
+    const prefix = ruleClassName.slice(0, -2); // ".*" 제거
+    return apiClassName === prefix || apiClassName.startsWith(prefix + ".");
+  }
+  return apiClassName === ruleClassName;
+}
+
 async function getModuleDetail(
   moduleId: string,
   search: string,
@@ -40,6 +51,11 @@ async function getModuleDetail(
   });
 
   if (!module) return null;
+
+  // 제외 규칙 조회 — 프로젝트 단위로 관리되므로 projectId 기준 조회
+  const excludeRules = await prisma.excludeRule.findMany({
+    where: { projectId: module.projectId },
+  });
 
   // 필터 조건 적용하여 API 목록 조회
   const apis = await prisma.apiEntry.findMany({
@@ -67,9 +83,30 @@ async function getModuleDetail(
     },
   });
 
+  // 제외 규칙 적용 — DB에 저장된 규칙을 서버사이드에서 필터링
+  // 재파싱 없이도 UI에서 즉시 반영됨
+  const filteredApis = apis.filter((api) => {
+    for (const rule of excludeRules) {
+      if (rule.type === "CLASS") {
+        if (matchesExcludeClass(api.className, rule.className)) return false;
+      } else if (rule.type === "METHOD" && api.methodName === rule.methodName) {
+        if (!matchesExcludeClass(api.className, rule.className)) continue;
+        // matchParams가 false면 메서드명만 일치해도 제외
+        if (!rule.matchParams) return false;
+        // matchParams가 true면 파라미터 목록까지 비교
+        const ruleParams = rule.params as string[];
+        const apiParams = api.params as string[];
+        if (JSON.stringify(apiParams) === JSON.stringify(ruleParams)) return false;
+      }
+    }
+    return true;
+  });
+
+  console.log(`[Module Detail Page] 전체 API: ${apis.length}, 제외 후: ${filteredApis.length} (규칙 ${excludeRules.length}개 적용)`);
+
   // 클래스별 그룹핑
   // TypeScript Record<string, T[]>: Java의 Map<String, List<T>>와 동일
-  const grouped = apis.reduce(
+  const grouped = filteredApis.reduce(
     (acc, api) => {
       if (!acc[api.className]) acc[api.className] = [];
       acc[api.className].push({
@@ -88,7 +125,8 @@ async function getModuleDetail(
   return {
     module,
     grouped,
-    totalFilteredApis: apis.length,
+    totalFilteredApis: filteredApis.length,
+    excludeRuleCount: excludeRules.length,
     parseOptions: (module.parseOptions ?? {}) as Partial<ParseOptions>,
   };
 }
@@ -103,7 +141,7 @@ export default async function ModuleDetailPage({ params, searchParams }: PagePro
   const data = await getModuleDetail(moduleId, search, classNameFilter);
   if (!data) notFound();
 
-  const { module, grouped, totalFilteredApis, parseOptions } = data;
+  const { module, grouped, totalFilteredApis, excludeRuleCount, parseOptions } = data;
 
   // 클래스 단위 페이지네이션
   const allClassEntries = Object.entries(grouped);
@@ -139,6 +177,9 @@ export default async function ModuleDetailPage({ params, searchParams }: PagePro
             </div>
             <p className="text-sm text-muted-foreground">
               {module.project.name} • 전체 API {module._count.apis}개
+              {excludeRuleCount > 0 && (
+                <span className="ml-1 text-orange-500">(제외 규칙 {excludeRuleCount}개 적용 중)</span>
+              )}
             </p>
           </div>
         </div>

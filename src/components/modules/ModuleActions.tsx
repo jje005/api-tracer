@@ -59,6 +59,8 @@ export function ModuleActions({ moduleId, moduleName, projectId, versions, parse
 
   // 재파싱 상태 — 최신 버전 경로를 이용해 AAR/JAR를 다시 파싱
   const [reparsing, setReparsing] = useState(false);
+  // 파싱 옵션 저장 후 재파싱 필요 여부 알림 상태
+  const [needsReparse, setNeedsReparse] = useState(false);
 
   // 버전 삭제 상태 (versionId → loading)
   // Record<string, boolean>: Java의 Map<String, Boolean>과 유사
@@ -150,7 +152,8 @@ export function ModuleActions({ moduleId, moduleName, projectId, versions, parse
         return;
       }
 
-      setOptsResult("파싱 옵션이 저장되었습니다. 다음 파싱 시 적용됩니다.");
+      setOptsResult("파싱 옵션이 저장되었습니다.");
+      setNeedsReparse(true); // 재파싱 필요 상태 표시
       router.refresh();
     } catch (e) {
       console.error("[ModuleActions] 옵션 저장 오류:", e);
@@ -187,11 +190,16 @@ export function ModuleActions({ moduleId, moduleName, projectId, versions, parse
   // ── 재파싱 ─────────────────────────────────────────────────────
   // 최신 버전의 dirPath를 이용해 AAR/JAR를 다시 파싱 (경로 기반 등록 시에만 가능)
   // Java라면 Service 계층 호출이지만 여기서는 fetch로 API Route에 위임
-  const handleReparse = async () => {
+  // allowWithoutDirPath: 파싱 옵션 저장 후 재파싱 시 dirPath 없어도 진행 (filePath 우선)
+  const handleReparse = async (allowWithoutDirPath = false) => {
     const latestVersion = versions[0];
     // dirPath가 없으면 경로 기반 등록이 아니므로 재파싱 불가
-    if (!latestVersion?.dirPath) {
+    if (!latestVersion?.dirPath && !allowWithoutDirPath) {
       alert("경로 기반으로 등록된 모듈만 재파싱 가능합니다");
+      return;
+    }
+    if (!latestVersion) {
+      alert("파싱된 버전 정보가 없습니다");
       return;
     }
 
@@ -220,6 +228,7 @@ export function ModuleActions({ moduleId, moduleName, projectId, versions, parse
       }
 
       console.log(`[ModuleActions] 재파싱 완료: ${moduleName}`);
+      setNeedsReparse(false); // 재파싱 완료 → 알림 해제
       router.refresh();
     } catch (e) {
       console.error("[ModuleActions] 재파싱 오류:", e);
@@ -336,7 +345,7 @@ export function ModuleActions({ moduleId, moduleName, projectId, versions, parse
             {/* 재파싱 버튼 — dirPath가 있는 경로 기반 등록 모듈에서만 표시 */}
             {versions[0]?.dirPath && (
               <button
-                onClick={handleReparse}
+                onClick={() => handleReparse()}
                 disabled={reparsing}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-sm hover:bg-accent transition-colors disabled:opacity-50"
                 title="최신 버전 경로 기반 재파싱"
@@ -399,20 +408,53 @@ export function ModuleActions({ moduleId, moduleName, projectId, versions, parse
             ))}
           </div>
 
-          {/* 저장 버튼 + 결과 */}
-          <div className="flex items-center gap-3 pt-1">
+          {/* 저장 버튼 영역 */}
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            {/* 저장만 */}
             <button
               onClick={handleSaveParseOptions}
-              disabled={savingOpts}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-xs hover:opacity-90 disabled:opacity-50 transition-opacity"
+              disabled={savingOpts || reparsing}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-xs hover:bg-accent disabled:opacity-50 transition-colors"
             >
               {savingOpts ? <RefreshCw size={11} className="animate-spin" /> : <Check size={11} />}
-              {savingOpts ? "저장 중..." : "저장"}
+              {savingOpts ? "저장 중..." : "저장만"}
             </button>
+
+            {/* 저장 + 즉시 재파싱 — dirPath가 있어야 활성화 */}
+            {versions[0]?.dirPath && (
+              <button
+                onClick={async () => {
+                  await handleSaveParseOptions();
+                  await handleReparse(true);
+                }}
+                disabled={savingOpts || reparsing}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-xs hover:opacity-90 disabled:opacity-50 transition-opacity"
+              >
+                {(savingOpts || reparsing) ? <RefreshCw size={11} className="animate-spin" /> : <RotateCcw size={11} />}
+                {(savingOpts || reparsing) ? "처리 중..." : "저장 + 재파싱"}
+              </button>
+            )}
+
             {optsResult && (
               <p className="text-xs text-muted-foreground">{optsResult}</p>
             )}
           </div>
+
+          {/* 재파싱 필요 알림 배너 — "저장만" 클릭 후 표시 */}
+          {needsReparse && versions[0]?.dirPath && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-md border border-orange-300 bg-orange-50 text-orange-700 text-xs">
+              <AlertTriangle size={12} />
+              <span>옵션이 저장되었습니다. 실제 API 목록에 반영하려면 재파싱이 필요합니다.</span>
+              <button
+                onClick={() => handleReparse(true)}
+                disabled={reparsing}
+                className="ml-auto flex items-center gap-1 px-2 py-1 rounded bg-orange-600 text-white hover:opacity-90 disabled:opacity-50"
+              >
+                {reparsing ? <RefreshCw size={10} className="animate-spin" /> : <RotateCcw size={10} />}
+                지금 재파싱
+              </button>
+            </div>
+          )}
         </div>
       )}
 

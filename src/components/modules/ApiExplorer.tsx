@@ -4,7 +4,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronRight, ChevronsDownUp, ChevronsUpDown, Ban, X, Check, RefreshCw } from "lucide-react";
+import { ChevronRight, ChevronsDownUp, ChevronsUpDown, Ban, X, Check, RefreshCw, ChevronsLeft, ChevronsRight } from "lucide-react";
 import { useExcludeRulesStore } from "@/lib/stores/excludeRulesStore";
 
 // ─── 타입 정의 ────────────────────────────────────────────────
@@ -51,6 +51,8 @@ function ExcludePopup({
   const [error, setError] = useState("");
   // 제외 규칙 추가 후 ExcludeRulesPanel에 변경 알림 (Zustand)
   const notifyChanged = useExcludeRulesStore((s) => s.notifyChanged);
+  // router.refresh(): 서버 컴포넌트를 재요청하여 최신 제외 규칙이 적용된 목록으로 갱신
+  const router = useRouter();
   // 팝업 외부 클릭 시 닫기를 위한 ref
   const ref = useRef<HTMLDivElement>(null);
 
@@ -90,6 +92,8 @@ function ExcludePopup({
       console.log(`[ApiExplorer] 제외 규칙 추가: ${type} ${className}${methodName ? `.${methodName}` : ""}`);
       // ExcludeRulesPanel이 있는 업로드 페이지 등에서 자동 동기화되도록 알림
       notifyChanged(projectId);
+      // 서버 컴포넌트 재렌더링 → 새로 추가된 제외 규칙이 API 목록에 즉시 반영
+      router.refresh();
       onSuccess();
     } catch (e) {
       setError(e instanceof Error ? e.message : "오류 발생");
@@ -228,7 +232,15 @@ function Pagination({ moduleId, currentPage, totalPages, search }: {
 
   return (
     <div className="flex items-center justify-center gap-1 mt-4">
+      {/* 맨 처음 페이지로 이동 */}
+      <button onClick={() => goTo(1)} disabled={currentPage === 1}
+        title="첫 페이지"
+        className="px-2 py-1.5 rounded-md border text-sm disabled:opacity-40 hover:bg-accent transition-colors">
+        <ChevronsLeft size={14} />
+      </button>
+      {/* 이전 페이지 */}
       <button onClick={() => goTo(currentPage - 1)} disabled={currentPage === 1}
+        title="이전 페이지"
         className="px-3 py-1.5 rounded-md border text-sm disabled:opacity-40 hover:bg-accent transition-colors">‹</button>
       {getPageNumbers().map((p, i) =>
         p === "..." ? (
@@ -242,8 +254,16 @@ function Pagination({ moduleId, currentPage, totalPages, search }: {
           </button>
         )
       )}
+      {/* 다음 페이지 */}
       <button onClick={() => goTo(currentPage + 1)} disabled={currentPage === totalPages}
+        title="다음 페이지"
         className="px-3 py-1.5 rounded-md border text-sm disabled:opacity-40 hover:bg-accent transition-colors">›</button>
+      {/* 맨 마지막 페이지로 이동 */}
+      <button onClick={() => goTo(totalPages)} disabled={currentPage === totalPages}
+        title="마지막 페이지"
+        className="px-2 py-1.5 rounded-md border text-sm disabled:opacity-40 hover:bg-accent transition-colors">
+        <ChevronsRight size={14} />
+      </button>
     </div>
   );
 }
