@@ -4,6 +4,7 @@
 // Java의 @GetMapping + HttpServletResponse.setHeader()와 유사하게 응답 헤더 직접 설정
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { apiError, getErrorMessage } from "@/lib/apiResponse";
 
 /**
  * GET /api/coverage/export
@@ -16,7 +17,7 @@ export async function GET(req: NextRequest) {
   const projectId = req.nextUrl.searchParams.get("projectId");
 
   if (!projectId) {
-    return NextResponse.json({ error: "projectId 필요" }, { status: 400 });
+    return apiError.badRequest("projectId 파라미터가 필요합니다");
   }
 
   console.log(`[Coverage Export] CSV 내보내기 시작: projectId=${projectId}`);
@@ -29,7 +30,7 @@ export async function GET(req: NextRequest) {
     });
 
     if (!project) {
-      return NextResponse.json({ error: "프로젝트를 찾을 수 없습니다" }, { status: 404 });
+      return apiError.notFound("프로젝트를 찾을 수 없습니다");
     }
 
     // 해당 프로젝트의 모든 API + 커버리지 조회
@@ -108,8 +109,8 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = getErrorMessage(e);
     console.error("[Coverage Export] 오류:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiError.internal(message);
   }
 }

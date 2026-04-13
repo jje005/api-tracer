@@ -3,6 +3,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { isValidDir, scanAarJarFiles, scanTcFiles } from "@/lib/services/fileSystemService";
+import { getErrorMessage } from "@/lib/apiResponse";
 
 /**
  * POST /api/parse/validate
@@ -58,8 +59,8 @@ export async function POST(req: NextRequest) {
       totalCount: files.length,
     });
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = getErrorMessage(e);
     console.error("[Validate API] 오류:", message);
-    return NextResponse.json({ valid: false, message }, { status: 500 });
+    return NextResponse.json({ valid: false, error: message }, { status: 500 });
   }
 }

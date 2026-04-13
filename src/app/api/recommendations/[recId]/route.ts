@@ -1,6 +1,7 @@
 // 개별 TC 추천 삭제 API
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { apiError, apiSuccess, getErrorMessage } from "@/lib/apiResponse";
 
 interface RouteParams {
   params: Promise<{ recId: string }>;
@@ -16,10 +17,10 @@ export async function DELETE(_req: NextRequest, { params }: RouteParams) {
 
   try {
     await prisma.recommendation.delete({ where: { id: recId } });
-    return NextResponse.json({ success: true });
+    return apiSuccess.ok({ success: true });
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = getErrorMessage(e);
     console.error("[Recommendations API] 삭제 오류:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiError.internal(message);
   }
 }

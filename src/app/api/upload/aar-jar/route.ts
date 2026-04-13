@@ -2,12 +2,13 @@
 // Next.js App Router의 Route Handler: Java Spring의 @PostMapping과 유사
 // 파일 업로드 → 임시 저장 → 파싱 → DB 저장의 흐름
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import { prisma } from "@/lib/prisma";
 import { parseAarOrJar, applyExcludeRules } from "@/lib/services/jarParserService";
 import { ParseOptions, DEFAULT_PARSE_OPTIONS } from "@/lib/parseOptions";
+import { apiError, apiSuccess, getErrorMessage } from "@/lib/apiResponse";
 
 // 업로드 파일 저장 기본 경로
 const UPLOAD_DIR = process.env.UPLOAD_DIR ?? "./uploads";
@@ -48,10 +49,7 @@ export async function POST(req: NextRequest) {
 
     // 입력값 검증
     if (!file || !projectId || !moduleName || !version) {
-      return NextResponse.json(
-        { error: "file, projectId, moduleName, version 필드가 필요합니다" },
-        { status: 400 }
-      );
+      return apiError.badRequest("file, projectId, moduleName, version 필드가 필요합니다");
     }
 
     // 파일 확장자로 타입 판별
@@ -63,10 +61,7 @@ export async function POST(req: NextRequest) {
       : null;
 
     if (!fileType) {
-      return NextResponse.json(
-        { error: ".aar 또는 .jar 파일만 허용됩니다" },
-        { status: 400 }
-      );
+      return apiError.badRequest(".aar 또는 .jar 파일만 허용됩니다");
     }
 
     console.log(`[Upload API] 파일명: ${file.name}, 크기: ${file.size} bytes`);
@@ -91,10 +86,7 @@ export async function POST(req: NextRequest) {
       where: { id: projectId },
     });
     if (!project) {
-      return NextResponse.json(
-        { error: "존재하지 않는 프로젝트입니다" },
-        { status: 404 }
-      );
+      return apiError.notFound("존재하지 않는 프로젝트입니다");
     }
 
     // 모듈 upsert — 파싱 옵션 포함
@@ -127,10 +119,7 @@ export async function POST(req: NextRequest) {
       },
     });
     if (existingVersion) {
-      return NextResponse.json(
-        { error: `버전 ${version}은 이미 업로드되어 있습니다` },
-        { status: 409 }
-      );
+      return apiError.conflict(`버전 ${version}은 이미 업로드되어 있습니다`);
     }
 
     // AAR/JAR 파싱 실행 (resolvedParseOptions 적용)
@@ -238,25 +227,19 @@ export async function POST(req: NextRequest) {
       return { moduleVersion, newCount, sameCount };
     }, { timeout: 60_000 }); // 대용량 JAR 대비 60초
 
-    return NextResponse.json(
-      {
-        success: true,
-        message: "파싱 및 저장 완료",
-        moduleId: module.id,
-        versionId: saved.moduleVersion.id,
-        totalApis: parseResult.apis.length,
-        newApis: saved.newCount,
-        totalClasses: parseResult.totalClasses,
-        parseErrors: parseResult.errors,
-      },
-      { status: 201 }
-    );
+    return apiSuccess.created({
+      success: true,
+      message: "파싱 및 저장 완료",
+      moduleId: module.id,
+      versionId: saved.moduleVersion.id,
+      totalApis: parseResult.apis.length,
+      newApis: saved.newCount,
+      totalClasses: parseResult.totalClasses,
+      parseErrors: parseResult.errors,
+    });
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = getErrorMessage(e);
     console.error(`[Upload API] 오류 발생:`, message);
-    return NextResponse.json(
-      { error: "파일 처리 중 오류가 발생했습니다", detail: message },
-      { status: 500 }
-    );
+    return apiError.internal(`파일 처리 중 오류가 발생했습니다: ${message}`);
   }
 }

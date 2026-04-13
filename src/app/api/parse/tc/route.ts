@@ -1,11 +1,12 @@
 // TC 경로 기반 스캔 + 분석 API Route
 // dirPath를 받아 재귀 스캔 → 파싱 → API 매핑 → Coverage 저장
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { scanTcFiles, isValidDir } from "@/lib/services/fileSystemService";
 import { analyzeTcFiles, matchApisToEntries } from "@/lib/services/tcAnalyzerService";
 import { saveCoverage, clearSuiteCoverage } from "@/lib/services/coverageService";
+import { apiError, apiSuccess, getErrorMessage } from "@/lib/apiResponse";
 
 /**
  * POST /api/parse/tc
@@ -30,14 +31,11 @@ export async function POST(req: NextRequest) {
     const { dirPath, suiteName, projectId, reparse = false } = body;
 
     if (!dirPath || !suiteName || !projectId) {
-      return NextResponse.json(
-        { error: "dirPath, suiteName, projectId 필드가 필요합니다" },
-        { status: 400 }
-      );
+      return apiError.badRequest("dirPath, suiteName, projectId 필드가 필요합니다");
     }
 
     if (!isValidDir(dirPath)) {
-      return NextResponse.json({ error: "존재하지 않는 디렉토리입니다" }, { status: 400 });
+      return apiError.badRequest("존재하지 않는 디렉토리입니다");
     }
 
     // 재파싱: 동일 dirPath의 기존 TestSuite 삭제
@@ -55,7 +53,7 @@ export async function POST(req: NextRequest) {
     console.log(`[Parse TC API] 스캔 중: ${dirPath}`);
     const scannedFiles = await scanTcFiles(dirPath);
     if (scannedFiles.length === 0) {
-      return NextResponse.json({ error: "해당 경로에서 .java/.kt 파일을 찾을 수 없습니다" }, { status: 400 });
+      return apiError.badRequest("해당 경로에서 .java/.kt 파일을 찾을 수 없습니다");
     }
 
     // 2. TC 파싱 (호출된 API 추출)
@@ -124,21 +122,18 @@ export async function POST(req: NextRequest) {
 
     console.log(`[Parse TC API] 완료: TC ${result.totalTcSaved}개, 커버리지 ${result.totalCovered}건`);
 
-    return NextResponse.json(
-      {
-        success: true,
-        suiteId: result.suite.id,
-        totalFiles: scannedFiles.length,
-        totalTcSaved: result.totalTcSaved,
-        totalCoverageLinks: result.totalCovered,
-        parseErrors: analyzeResult.errors,
-      },
-      { status: 201 }
-    );
+    return apiSuccess.created({
+      success: true,
+      suiteId: result.suite.id,
+      totalFiles: scannedFiles.length,
+      totalTcSaved: result.totalTcSaved,
+      totalCoverageLinks: result.totalCovered,
+      parseErrors: analyzeResult.errors,
+    });
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = getErrorMessage(e);
     console.error("[Parse TC API] 오류:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiError.internal(message);
   }
 }
 
@@ -168,7 +163,7 @@ export async function GET(req: NextRequest) {
       include: { _count: { select: { testCases: true } } },
     });
 
-    if (suites.length === 0) return NextResponse.json([]);
+    if (suites.length === 0) return apiSuccess.ok([]);
 
     // 스위트별 연동 프로젝트를 한 번의 쿼리로 역추적
     // N+1 방지: 모든 스위트의 coverage를 한번에 조회한 뒤 클라이언트에서 그룹핑
@@ -194,7 +189,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    return NextResponse.json(
+    return apiSuccess.ok(
       suites.map((s) => ({
         id: s.id,
         name: s.name,
@@ -207,7 +202,7 @@ export async function GET(req: NextRequest) {
       }))
     );
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
-    return NextResponse.json({ error: message }, { status: 500 });
+    const message = getErrorMessage(e);
+    return apiError.internal(message);
   }
 }

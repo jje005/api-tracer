@@ -1,6 +1,7 @@
 // 프로젝트 CRUD API Route
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { apiError, apiSuccess, getErrorMessage } from "@/lib/apiResponse";
 
 /**
  * GET /api/projects
@@ -64,11 +65,11 @@ export async function GET() {
       })
     );
 
-    return NextResponse.json(result);
+    return apiSuccess.ok(result);
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = getErrorMessage(e);
     console.error("[Projects API] 조회 오류:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiError.internal(message);
   }
 }
 
@@ -86,10 +87,7 @@ export async function POST(req: NextRequest) {
     const body = (await req.json()) as { name?: string; description?: string };
 
     if (!body.name?.trim()) {
-      return NextResponse.json(
-        { error: "프로젝트 이름은 필수입니다" },
-        { status: 400 }
-      );
+      return apiError.badRequest("프로젝트 이름은 필수입니다");
     }
 
     const project = await prisma.project.create({
@@ -100,10 +98,10 @@ export async function POST(req: NextRequest) {
     });
 
     console.log(`[Projects API] 생성 완료: ${project.id}`);
-    return NextResponse.json(project, { status: 201 });
+    return apiSuccess.created(project);
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = getErrorMessage(e);
     console.error("[Projects API] 생성 오류:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiError.internal(message);
   }
 }

@@ -1,6 +1,7 @@
 // 제외 규칙 단건 수정 / 삭제 API
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { apiError, apiSuccess, getErrorMessage } from "@/lib/apiResponse";
 
 interface RouteParams {
   params: Promise<{ projectId: string; ruleId: string }>;
@@ -30,10 +31,10 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     });
 
     console.log(`[ExcludeRules API] 규칙 수정: ${ruleId}`);
-    return NextResponse.json(rule);
+    return apiSuccess.ok(rule);
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
-    return NextResponse.json({ error: message }, { status: 500 });
+    const message = getErrorMessage(e);
+    return apiError.internal(message);
   }
 }
 
@@ -47,9 +48,9 @@ export async function DELETE(_req: NextRequest, { params }: RouteParams) {
   try {
     await prisma.excludeRule.delete({ where: { id: ruleId, projectId } });
     console.log(`[ExcludeRules API] 규칙 삭제: ${ruleId}`);
-    return NextResponse.json({ success: true });
+    return apiSuccess.ok({ success: true });
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
-    return NextResponse.json({ error: message }, { status: 500 });
+    const message = getErrorMessage(e);
+    return apiError.internal(message);
   }
 }

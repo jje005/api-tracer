@@ -2,12 +2,13 @@
 // 브라우저 업로드 없이 서버 파일시스템에서 직접 파싱
 // 재파싱: 동일 버전이 이미 있으면 기존 데이터 삭제 후 재처리
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import path from "path";
 import { prisma } from "@/lib/prisma";
 import { parseAarOrJar, applyExcludeRules } from "@/lib/services/jarParserService";
 import { ParseOptions, DEFAULT_PARSE_OPTIONS } from "@/lib/parseOptions";
 import { scanAarJarFiles, isValidDir } from "@/lib/services/fileSystemService";
+import { apiError, apiSuccess, getErrorMessage } from "@/lib/apiResponse";
 
 /**
  * POST /api/parse/aar-jar
@@ -39,14 +40,11 @@ export async function POST(req: NextRequest) {
 
     // 입력값 검증
     if (!dirPath || !projectId || !moduleName || !version) {
-      return NextResponse.json(
-        { error: "dirPath, projectId, moduleName, version 필드가 필요합니다" },
-        { status: 400 }
-      );
+      return apiError.badRequest("dirPath, projectId, moduleName, version 필드가 필요합니다");
     }
 
     if (!isValidDir(dirPath)) {
-      return NextResponse.json({ error: "존재하지 않는 디렉토리입니다" }, { status: 400 });
+      return apiError.badRequest("존재하지 않는 디렉토리입니다");
     }
 
     // 파싱할 파일 결정
@@ -57,10 +55,7 @@ export async function POST(req: NextRequest) {
       // fileName 미지정 시 디렉토리에서 첫 번째 AAR/JAR 자동 선택
       const scanned = await scanAarJarFiles(dirPath);
       if (scanned.length === 0) {
-        return NextResponse.json(
-          { error: "해당 경로에서 .aar/.jar 파일을 찾을 수 없습니다" },
-          { status: 400 }
-        );
+        return apiError.badRequest("해당 경로에서 .aar/.jar 파일을 찾을 수 없습니다");
       }
       targetFilePath = scanned[0].filePath;
     }
@@ -69,7 +64,7 @@ export async function POST(req: NextRequest) {
     const ext = path.extname(targetFilePath).toLowerCase();
     const fileType = ext === ".aar" ? "AAR" : ext === ".jar" ? "JAR" : null;
     if (!fileType) {
-      return NextResponse.json({ error: ".aar 또는 .jar 파일만 지원합니다" }, { status: 400 });
+      return apiError.badRequest(".aar 또는 .jar 파일만 지원합니다");
     }
 
     console.log(`[Parse AAR-JAR API] 파일: ${targetFilePath}, 버전: ${version}`);
@@ -77,7 +72,7 @@ export async function POST(req: NextRequest) {
     // 프로젝트 확인
     const project = await prisma.project.findUnique({ where: { id: projectId } });
     if (!project) {
-      return NextResponse.json({ error: "존재하지 않는 프로젝트입니다" }, { status: 404 });
+      return apiError.notFound("존재하지 않는 프로젝트입니다");
     }
 
     // 모듈 upsert — 새 파싱 옵션이 전달된 경우 업데이트
@@ -118,10 +113,7 @@ export async function POST(req: NextRequest) {
         where: { moduleId_version: { moduleId: module.id, version } },
       });
       if (existing) {
-        return NextResponse.json(
-          { error: `버전 ${version}은 이미 존재합니다. 재파싱하려면 reparse: true를 사용하세요` },
-          { status: 409 }
-        );
+        return apiError.conflict(`버전 ${version}은 이미 존재합니다. 재파싱하려면 reparse: true를 사용하세요`);
       }
     }
 
@@ -233,25 +225,22 @@ export async function POST(req: NextRequest) {
 
     console.log(`[Parse AAR-JAR API] 완료: API ${parseResult.apis.length}개`);
 
-    return NextResponse.json(
-      {
-        success: true,
-        moduleId: module.id,
-        versionId: saved.moduleVersion.id,
-        totalApis: parseResult.apis.length,
-        excludedApis: excludedCount,
-        newApis: saved.newCount,
-        sameApis: saved.sameCount,
-        totalClasses: parseResult.totalClasses,
-        parseErrors: parseResult.errors,
-        filePath: targetFilePath,
-      },
-      { status: 201 }
-    );
+    return apiSuccess.created({
+      success: true,
+      moduleId: module.id,
+      versionId: saved.moduleVersion.id,
+      totalApis: parseResult.apis.length,
+      excludedApis: excludedCount,
+      newApis: saved.newCount,
+      sameApis: saved.sameCount,
+      totalClasses: parseResult.totalClasses,
+      parseErrors: parseResult.errors,
+      filePath: targetFilePath,
+    });
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = getErrorMessage(e);
     console.error("[Parse AAR-JAR API] 오류:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiError.internal(message);
   }
 }
 
@@ -262,15 +251,15 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   const dirPath = req.nextUrl.searchParams.get("dirPath");
   if (!dirPath) {
-    return NextResponse.json({ error: "dirPath 파라미터가 필요합니다" }, { status: 400 });
+    return apiError.badRequest("dirPath 파라미터가 필요합니다");
   }
 
   if (!isValidDir(dirPath)) {
-    return NextResponse.json({ error: "존재하지 않는 디렉토리입니다" }, { status: 400 });
+    return apiError.badRequest("존재하지 않는 디렉토리입니다");
   }
 
   const files = await scanAarJarFiles(dirPath);
-  return NextResponse.json({
+  return apiSuccess.ok({
     dirPath,
     files: files.map((f) => ({ fileName: f.fileName, filePath: f.filePath, sizeBytes: f.sizeBytes })),
   });

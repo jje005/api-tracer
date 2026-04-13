@@ -1,6 +1,7 @@
 // 커버리지 요약 API — 프로젝트 전체 + 모듈별 요약 (API 상세 미포함)
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { getProjectCoverageSummaries } from "@/lib/services/coverageService";
+import { apiError, apiSuccess, getErrorMessage } from "@/lib/apiResponse";
 
 /**
  * GET /api/coverage?projectId=xxx
@@ -10,17 +11,17 @@ import { getProjectCoverageSummaries } from "@/lib/services/coverageService";
 export async function GET(req: NextRequest) {
   const projectId = req.nextUrl.searchParams.get("projectId");
   if (!projectId) {
-    return NextResponse.json({ error: "projectId 파라미터가 필요합니다" }, { status: 400 });
+    return apiError.badRequest("projectId 파라미터가 필요합니다");
   }
 
   console.log(`[Coverage API] 커버리지 요약 조회: ${projectId}`);
 
   try {
     const result = await getProjectCoverageSummaries(projectId);
-    return NextResponse.json(result);
+    return apiSuccess.ok(result);
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = getErrorMessage(e);
     console.error("[Coverage API] 오류:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiError.internal(message);
   }
 }

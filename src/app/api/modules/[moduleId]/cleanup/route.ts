@@ -2,8 +2,9 @@
 // 파서 버그로 인해 저장된 잘못된 ApiEntry를 DB에서 직접 제거
 // 재파싱 없이 오염된 데이터만 선별 삭제
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { apiError, apiSuccess, getErrorMessage } from "@/lib/apiResponse";
 
 interface RouteParams {
   params: Promise<{ moduleId: string }>;
@@ -53,7 +54,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
     if (dryRun) {
       // dry run: 삭제하지 않고 목록만 반환
-      return NextResponse.json({
+      return apiSuccess.ok({
         dryRun: true,
         total: entries.length,
         invalidCount: invalid.length,
@@ -66,7 +67,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     }
 
     if (invalid.length === 0) {
-      return NextResponse.json({ deleted: 0, message: "정리할 항목이 없습니다" });
+      return apiSuccess.ok({ deleted: 0, info: "정리할 항목이 없습니다" });
     }
 
     const invalidIds = invalid.map((e) => e.id);
@@ -78,13 +79,13 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
     console.log(`[Cleanup API] 삭제 완료: ${deleted.count}개`);
 
-    return NextResponse.json({
+    return apiSuccess.ok({
       deleted: deleted.count,
-      message: `${deleted.count}개의 잘못된 API 항목이 정리되었습니다`,
+      info: `${deleted.count}개의 잘못된 API 항목이 정리되었습니다`,
     });
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = getErrorMessage(e);
     console.error("[Cleanup API] 오류:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiError.internal(message);
   }
 }

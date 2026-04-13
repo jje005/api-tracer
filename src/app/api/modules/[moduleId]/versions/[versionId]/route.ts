@@ -1,6 +1,7 @@
 // 특정 버전 삭제 API Route
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { apiError, apiSuccess, getErrorMessage } from "@/lib/apiResponse";
 
 interface RouteParams {
   params: Promise<{ moduleId: string; versionId: string }>;
@@ -23,7 +24,7 @@ export async function DELETE(_req: NextRequest, { params }: RouteParams) {
     });
 
     if (!version || version.moduleId !== moduleId) {
-      return NextResponse.json({ error: "버전을 찾을 수 없습니다" }, { status: 404 });
+      return apiError.notFound("버전을 찾을 수 없습니다");
     }
 
     // 모듈의 전체 버전 수 확인 (마지막 버전 삭제 시 경고용)
@@ -34,14 +35,10 @@ export async function DELETE(_req: NextRequest, { params }: RouteParams) {
 
     console.log(`[Version API] 버전 삭제 완료: v${version.version} (스냅샷 ${version._count.apiSnapshots}개 삭제)`);
 
-    return NextResponse.json({
-      success: true,
-      wasLastVersion: totalVersions === 1,
-      deletedVersion: version.version,
-    });
+    return apiSuccess.ok({ success: true, wasLastVersion: totalVersions === 1, deletedVersion: version.version });
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = getErrorMessage(e);
     console.error("[Version API] 삭제 오류:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiError.internal(message);
   }
 }

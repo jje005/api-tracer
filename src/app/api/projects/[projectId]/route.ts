@@ -1,6 +1,7 @@
 // 프로젝트 단건 수정/삭제 API
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { apiError, apiSuccess, getErrorMessage } from "@/lib/apiResponse";
 
 interface RouteParams {
   params: Promise<{ projectId: string }>;
@@ -19,7 +20,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     const body = await req.json() as { name?: string; description?: string };
 
     if (body.name !== undefined && !body.name.trim()) {
-      return NextResponse.json({ error: "프로젝트 이름은 비워둘 수 없습니다" }, { status: 400 });
+      return apiError.badRequest("프로젝트 이름은 비워둘 수 없습니다");
     }
 
     const updated = await prisma.project.update({
@@ -31,11 +32,11 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     });
 
     console.log(`[Projects API] 수정 완료: ${updated.name}`);
-    return NextResponse.json({ id: updated.id, name: updated.name, description: updated.description });
+    return apiSuccess.ok({ id: updated.id, name: updated.name, description: updated.description });
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = getErrorMessage(e);
     console.error("[Projects API] 수정 오류:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiError.internal(message);
   }
 }
 
@@ -54,16 +55,16 @@ export async function DELETE(_req: NextRequest, { params }: RouteParams) {
       include: { _count: { select: { modules: true } } },
     });
     if (!project) {
-      return NextResponse.json({ error: "프로젝트를 찾을 수 없습니다" }, { status: 404 });
+      return apiError.notFound("프로젝트를 찾을 수 없습니다");
     }
 
     await prisma.project.delete({ where: { id: projectId } });
 
     console.log(`[Projects API] 삭제 완료: ${project.name} (모듈 ${project._count.modules}개)`);
-    return NextResponse.json({ success: true, deletedName: project.name });
+    return apiSuccess.ok({ success: true, deletedName: project.name });
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = getErrorMessage(e);
     console.error("[Projects API] 삭제 오류:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiError.internal(message);
   }
 }

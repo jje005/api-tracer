@@ -1,8 +1,9 @@
 // TestSuite 단건 관리 API
 // DELETE: 스위트 + 케이스 + 커버리지 전체 삭제
 // GET: 스위트 내 TestCase 목록 (커버된 API 포함)
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { apiError, apiSuccess, getErrorMessage } from "@/lib/apiResponse";
 
 interface RouteParams {
   params: Promise<{ suiteId: string }>;
@@ -51,11 +52,11 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
       })),
     }));
 
-    return NextResponse.json(result);
+    return apiSuccess.ok(result);
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = getErrorMessage(e);
     console.error("[TC Suite API] 조회 오류:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiError.internal(message);
   }
 }
 
@@ -73,10 +74,10 @@ export async function DELETE(_req: NextRequest, { params }: RouteParams) {
     await prisma.testSuite.delete({ where: { id: suiteId } });
 
     console.log(`[TC Suite API] 삭제 완료: ${suiteId}`);
-    return NextResponse.json({ success: true });
+    return apiSuccess.ok({ success: true });
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = getErrorMessage(e);
     console.error("[TC Suite API] 삭제 오류:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiError.internal(message);
   }
 }

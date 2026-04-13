@@ -1,6 +1,7 @@
 // 모듈 목록 API Route
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { apiError, apiSuccess, getErrorMessage } from "@/lib/apiResponse";
 
 /**
  * GET /api/modules?projectId=xxx
@@ -33,10 +34,10 @@ export async function GET(req: NextRequest) {
       latestUploadedAt: m.versions[0]?.parsedAt ?? null,
     }));
 
-    return NextResponse.json(result);
+    return apiSuccess.ok(result);
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = getErrorMessage(e);
     console.error("[Modules API] 오류:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiError.internal(message);
   }
 }

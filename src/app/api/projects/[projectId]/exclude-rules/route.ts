@@ -1,6 +1,7 @@
 // 프로젝트 제외 규칙 목록 조회 + 생성 API
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { apiError, apiSuccess, getErrorMessage } from "@/lib/apiResponse";
 
 interface RouteParams {
   params: Promise<{ projectId: string }>;
@@ -20,11 +21,11 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
       orderBy: [{ type: "asc" }, { className: "asc" }, { createdAt: "asc" }],
     });
 
-    return NextResponse.json(rules);
+    return apiSuccess.ok(rules);
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = getErrorMessage(e);
     console.error("[ExcludeRules API] 조회 오류:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiError.internal(message);
   }
 }
 
@@ -56,10 +57,10 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     const { type, className, methodName, matchParams = false, params: ruleParams = [], note } = body;
 
     if (!className?.trim()) {
-      return NextResponse.json({ error: "className은 필수입니다" }, { status: 400 });
+      return apiError.badRequest("className은 필수입니다");
     }
     if (type === "METHOD" && !methodName?.trim()) {
-      return NextResponse.json({ error: "METHOD 타입은 methodName이 필요합니다" }, { status: 400 });
+      return apiError.badRequest("METHOD 타입은 methodName이 필요합니다");
     }
 
     const rule = await prisma.excludeRule.create({
@@ -75,10 +76,10 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     });
 
     console.log(`[ExcludeRules API] 규칙 추가: ${type} ${className}${methodName ? `.${methodName}` : ""}`);
-    return NextResponse.json(rule, { status: 201 });
+    return apiSuccess.created(rule);
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = getErrorMessage(e);
     console.error("[ExcludeRules API] 생성 오류:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiError.internal(message);
   }
 }

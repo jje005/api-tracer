@@ -1,6 +1,7 @@
 // 모듈 버전 목록 API Route
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { apiError, apiSuccess, getErrorMessage } from "@/lib/apiResponse";
 
 interface RouteParams {
   params: Promise<{ moduleId: string }>;
@@ -28,7 +29,7 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
       // 모듈 존재 여부 확인
       const module = await prisma.module.findUnique({ where: { id: moduleId } });
       if (!module) {
-        return NextResponse.json({ error: "모듈을 찾을 수 없습니다" }, { status: 404 });
+        return apiError.notFound("모듈을 찾을 수 없습니다");
       }
     }
 
@@ -40,10 +41,10 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
       apiCount: v._count.apiSnapshots,
     }));
 
-    return NextResponse.json(result);
+    return apiSuccess.ok(result);
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = getErrorMessage(e);
     console.error("[Versions API] 오류:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiError.internal(message);
   }
 }

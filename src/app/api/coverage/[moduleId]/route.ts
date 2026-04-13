@@ -1,6 +1,7 @@
 // 모듈별 API 커버리지 상세 API — 클래스 그룹핑 + 필터 + 페이지네이션
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { getModuleApiCoverage } from "@/lib/services/coverageService";
+import { apiError, apiSuccess, getErrorMessage } from "@/lib/apiResponse";
 
 interface RouteParams {
   params: Promise<{ moduleId: string }>;
@@ -28,10 +29,10 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
 
   try {
     const result = await getModuleApiCoverage(moduleId, filter, page, perPage);
-    return NextResponse.json(result);
+    return apiSuccess.ok(result);
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = getErrorMessage(e);
     console.error("[Coverage Module API] 오류:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiError.internal(message);
   }
 }

@@ -8,6 +8,7 @@ import { GitCompare, RefreshCw, ArrowRight } from "lucide-react";
 import { DiffTable, type DiffItem } from "@/components/diff/DiffTable";
 import { DiffSummaryBar } from "@/components/diff/DiffSummaryBar";
 import type { ChangeType } from "@/components/diff/ChangeTypeBadge";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 // ─── 타입 정의 ────────────────────────────────────────────────
 interface Module {
@@ -307,8 +308,10 @@ function DiffPageInner() {
               <p className="font-medium">두 버전 간 API 변경사항이 없습니다</p>
             </div>
           ) : (
-            /* Diff 테이블 */
-            <DiffTable items={flatItems} />
+            /* Diff 테이블 — ErrorBoundary로 테이블 렌더링 에러 격리 */
+            <ErrorBoundary fallback={<div className="p-4 rounded border border-red-200 bg-red-50 text-red-600 text-sm">Diff 목록을 표시하는 중 오류가 발생했습니다.</div>}>
+              <DiffTable items={flatItems} />
+            </ErrorBoundary>
           )}
         </div>
       )}

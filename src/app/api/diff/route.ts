@@ -1,8 +1,9 @@
 // 버전 Diff API Route
 // 두 ModuleVersion을 비교하여 ADDED / REMOVED / MODIFIED / SAME API 목록 반환
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { buildApiSignature } from "@/lib/utils";
+import { apiError, apiSuccess, getErrorMessage } from "@/lib/apiResponse";
 
 /**
  * GET /api/diff?v1=<versionId>&v2=<versionId>
@@ -21,10 +22,7 @@ export async function GET(req: NextRequest) {
   const v2Id = req.nextUrl.searchParams.get("v2");
 
   if (!v1Id || !v2Id) {
-    return NextResponse.json(
-      { error: "v1, v2 파라미터가 필요합니다" },
-      { status: 400 }
-    );
+    return apiError.badRequest("v1, v2 파라미터가 필요합니다");
   }
 
   console.log(`[Diff API] 비교 시작: v1=${v1Id}, v2=${v2Id}`);
@@ -50,10 +48,7 @@ export async function GET(req: NextRequest) {
     });
 
     if (!v1Version || !v2Version) {
-      return NextResponse.json(
-        { error: "버전 정보를 찾을 수 없습니다" },
-        { status: 404 }
-      );
+      return apiError.notFound("버전 정보를 찾을 수 없습니다");
     }
 
     // v1 API 맵: signature → ApiEntry
@@ -115,7 +110,7 @@ export async function GET(req: NextRequest) {
       `[Diff API] 결과 - 추가: ${added.length}, 삭제: ${removed.length}, 변경: ${modified.length}, 동일: ${same.length}`
     );
 
-    return NextResponse.json({
+    return apiSuccess.ok({
       v1: { id: v1Id, version: v1Version.version },
       v2: { id: v2Id, version: v2Version.version },
       summary: {
@@ -128,8 +123,8 @@ export async function GET(req: NextRequest) {
       diff: { added, removed, modified, same },
     });
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = getErrorMessage(e);
     console.error("[Diff API] 오류:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiError.internal(message);
   }
 }

@@ -1,8 +1,9 @@
 // 모듈 상세 + API 목록 + 수정 + 삭제 API Route
 // Next.js의 동적 라우트: [moduleId]는 Java의 @PathVariable과 동일
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ParseOptions } from "@/lib/parseOptions";
+import { apiError, apiSuccess, getErrorMessage } from "@/lib/apiResponse";
 
 // Next.js 15부터 동적 라우트의 params가 Promise로 변경됨
 // Java의 @PathVariable과 달리 await로 비동기 추출 필요
@@ -32,10 +33,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     });
 
     if (!module) {
-      return NextResponse.json(
-        { error: "모듈을 찾을 수 없습니다" },
-        { status: 404 }
-      );
+      return apiError.notFound("모듈을 찾을 수 없습니다");
     }
 
     // API 목록 조회 (검색 필터 적용)
@@ -67,7 +65,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
       {} as Record<string, typeof apis>
     );
 
-    return NextResponse.json({
+    return apiSuccess.ok({
       id: module.id,
       name: module.name,
       type: module.type,
@@ -78,9 +76,9 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
       apisByClass: groupedByClass,
     });
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = getErrorMessage(e);
     console.error("[Module Detail API] 오류:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiError.internal(message);
   }
 }
 
@@ -99,7 +97,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
 
     // 변경할 내용이 없으면 오류
     if (!name?.trim() && !parseOptions) {
-      return NextResponse.json({ error: "name 또는 parseOptions 중 하나가 필요합니다" }, { status: 400 });
+      return apiError.badRequest("name 또는 parseOptions 중 하나가 필요합니다");
     }
 
     // 업데이트할 필드만 동적으로 구성
@@ -114,15 +112,11 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     });
 
     console.log(`[Module API] 모듈 수정 완료: ${updated.name}`, parseOptions ? "옵션 포함" : "");
-    return NextResponse.json({
-      id: updated.id,
-      name: updated.name,
-      parseOptions: updated.parseOptions,
-    });
+    return apiSuccess.ok({ id: updated.id, name: updated.name, parseOptions: updated.parseOptions });
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = getErrorMessage(e);
     console.error("[Module API] 수정 오류:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiError.internal(message);
   }
 }
 
@@ -141,10 +135,10 @@ export async function DELETE(_req: NextRequest, { params }: RouteParams) {
     await prisma.module.delete({ where: { id: moduleId } });
 
     console.log(`[Module API] 모듈 삭제 완료: ${moduleId}`);
-    return NextResponse.json({ success: true });
+    return apiSuccess.ok({ success: true });
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = getErrorMessage(e);
     console.error("[Module API] 삭제 오류:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiError.internal(message);
   }
 }

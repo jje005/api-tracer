@@ -8,6 +8,7 @@ import { ArrowLeft, GitCompare } from "lucide-react";
 import { ModuleActions } from "@/components/modules/ModuleActions";
 import { ApiExplorer, type ApiEntryData } from "@/components/modules/ApiExplorer";
 import { type ParseOptions } from "@/lib/parseOptions";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 // ─── 상수 ────────────────────────────────────────────────────
 // 클래스 단위 페이지네이션: 페이지당 25개 클래스
@@ -199,20 +200,23 @@ export default async function ModuleDetailPage({ params, searchParams }: PagePro
 
       {/* API 탐색기 — 전체 열기/닫기 + 페이지네이션 */}
       {/* Suspense: useSearchParams()를 쓰는 ApiExplorer 내부 Pagination을 위해 필요 */}
-      <Suspense fallback={<div className="text-sm text-muted-foreground">로딩 중...</div>}>
-        <ApiExplorer
-          moduleId={moduleId}
-          projectId={module.project.id}
-          grouped={pageGrouped}
-          currentPage={currentPage}
-          totalPages={totalPages}
-          totalClasses={module._count.apis > 0 ? Object.keys(grouped).length : 0}
-          totalApis={module._count.apis}
-          filteredClasses={totalClasses}
-          filteredApis={totalFilteredApis}
-          search={search}
-        />
-      </Suspense>
+      {/* ErrorBoundary: ApiExplorer 렌더링 에러를 페이지 전체 크래시 없이 처리 */}
+      <ErrorBoundary fallback={<div className="p-4 rounded border border-red-200 bg-red-50 text-red-600 text-sm">API 목록을 불러오는 중 오류가 발생했습니다.</div>}>
+        <Suspense fallback={<div className="text-sm text-muted-foreground">로딩 중...</div>}>
+          <ApiExplorer
+            moduleId={moduleId}
+            projectId={module.project.id}
+            grouped={pageGrouped}
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalClasses={module._count.apis > 0 ? Object.keys(grouped).length : 0}
+            totalApis={module._count.apis}
+            filteredClasses={totalClasses}
+            filteredApis={totalFilteredApis}
+            search={search}
+          />
+        </Suspense>
+      </ErrorBoundary>
     </div>
   );
 }

@@ -2,9 +2,10 @@
 // GET: 저장된 추천 목록 조회
 // POST: 특정 모듈의 미커버 API에 대해 AI 추천 생성 + DB 저장
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/prisma";
+import { apiError, apiSuccess, getErrorMessage } from "@/lib/apiResponse";
 
 // Anthropic 클라이언트를 모듈 레벨에서 초기화하면 API 키 미설정 시 오류 발생
 // → 함수 호출 시점에 생성하여 키 검증 후 사용 (Lazy 초기화 패턴)
@@ -59,14 +60,14 @@ export async function GET(req: NextRequest) {
       {} as Record<string, typeof recommendations>
     );
 
-    return NextResponse.json({
+    return apiSuccess.ok({
       total: recommendations.length,
       grouped,
     });
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = getErrorMessage(e);
     console.error("[Recommendations API] GET 오류:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiError.internal(message);
   }
 }
 
@@ -92,7 +93,7 @@ export async function POST(req: NextRequest) {
     const { moduleId, limit = 10, replace = false } = body;
 
     if (!moduleId) {
-      return NextResponse.json({ error: "moduleId가 필요합니다" }, { status: 400 });
+      return apiError.badRequest("moduleId가 필요합니다");
     }
 
     // 모듈 정보 조회
@@ -101,7 +102,7 @@ export async function POST(req: NextRequest) {
       select: { id: true, name: true },
     });
     if (!module) {
-      return NextResponse.json({ error: "모듈을 찾을 수 없습니다" }, { status: 404 });
+      return apiError.notFound("모듈을 찾을 수 없습니다");
     }
 
     // 미커버 API 조회 — Coverage 레코드가 없는 ApiEntry
@@ -127,7 +128,7 @@ export async function POST(req: NextRequest) {
     });
 
     if (uncoveredApis.length === 0) {
-      return NextResponse.json({
+      return apiSuccess.ok({
         generated: 0,
         message: "미커버 API가 없습니다",
       });
@@ -145,7 +146,7 @@ export async function POST(req: NextRequest) {
       // Prisma select에서 recommendations가 항상 포함됨 → 타입 안전
       const apisWithoutRecs = uncoveredApis.filter((a) => a.recommendations.length === 0);
       if (apisWithoutRecs.length === 0) {
-        return NextResponse.json({
+        return apiSuccess.ok({
           generated: 0,
           message: "모든 미커버 API에 이미 추천이 존재합니다. '기존 추천 재생성' 옵션을 사용하세요",
         });
@@ -215,10 +216,7 @@ ${apiSummaries}
       aiResults = JSON.parse(cleaned);
     } catch (parseErr) {
       console.error("[Recommendations API] JSON 파싱 실패:", parseErr);
-      return NextResponse.json(
-        { error: "Claude 응답 파싱 실패. 잠시 후 다시 시도해주세요", raw: responseText.slice(0, 200) },
-        { status: 502 }
-      );
+      return apiError.badGateway("Claude 응답 파싱 실패. 잠시 후 다시 시도해주세요");
     }
 
     // API 시그니처로 apiEntry.id 매핑
@@ -259,7 +257,7 @@ ${apiSummaries}
 
     console.log(`[Recommendations API] 완료: ${savedCount}개 추천 저장, ${saveErrors.length}개 오류`);
 
-    return NextResponse.json({
+    return apiSuccess.ok({
       generated: savedCount,
       requested: uncoveredApis.length,
       errors: saveErrors,
@@ -267,8 +265,8 @@ ${apiSummaries}
       tokensUsed: message.usage.input_tokens + message.usage.output_tokens,
     });
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = getErrorMessage(e);
     console.error("[Recommendations API] 오류:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiError.internal(message);
   }
 }
