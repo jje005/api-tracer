@@ -1,0 +1,41 @@
+# 의존성
+node_modules/
+
+# Next.js 빌드 산출물
+.next/
+out/
+
+# 환경변수 — DB URL, API KEY 등 절대 커밋 금지
+.env
+.env.local
+.env.*.local
+.env.production
+
+# 업로드된 파일 (런타임 생성물)
+uploads/
+
+# TypeScript 빌드 캐시
+tsconfig.tsbuildinfo
+*.tsbuildinfo
+
+# 로그
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Claude Code 내부 설정
+.claude/
+
+# AAR/JAR 라이브러리 (사내 바이너리 — 커밋 제외)
+/lib/
+
+# AAR/JAR 바이너리 파일 전체 제외 (위치 무관)
+*.aar
+*.jar
