@@ -1,0 +1,216 @@
+// Prisma Schema - API 커버리지 분석기
+// Java와 달리 TypeScript/Prisma는 스키마 파일 하나로 DB 모델을 선언적으로 정의함
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── 프로젝트 ───────────────────────────────────────────────
+// 여러 모듈을 묶는 프로젝트 단위
+model Project {
+  id          String   @id @default(cuid())  // Java의 UUID와 유사하나 cuid() 사용
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  modules      Module[]
+  excludeRules ExcludeRule[]
+}
+
+// ─── 제외 규칙 ───────────────────────────────────────────────
+// 파싱 시 특정 클래스 또는 메서드를 API 목록에서 제외하는 규칙
+// 프로젝트 단위로 관리 (모든 버전 파싱에 공통 적용)
+model ExcludeRule {
+  id          String          @id @default(cuid())
+  projectId   String
+  type        ExcludeRuleType // CLASS: 클래스 전체 제외 | METHOD: 특정 메서드만 제외
+  className   String          // 제외 대상 클래스명 (와일드카드: "hmg.car.internal.*")
+  methodName  String?         // type=METHOD일 때 메서드명 (null이면 클래스 전체 제외)
+  matchParams Boolean         @default(false) // true이면 params까지 일치해야 제외
+  params      Json            @default("[]")  // matchParams=true일 때 비교할 파라미터 목록
+  note        String?         // 제외 이유 메모 (선택)
+  createdAt   DateTime        @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+enum ExcludeRuleType {
+  CLASS   // 클래스 전체를 제외
+  METHOD  // 특정 메서드(+파라미터 옵션)만 제외
+}
+
+// ─── 모듈 ────────────────────────────────────────────────────
+// AAR 또는 JAR 파일 단위의 모듈
+model Module {
+  id           String     @id @default(cuid())
+  projectId    String
+  name         String
+  type         ModuleType // AAR | JAR (TypeScript enum과 다르게 DB 레벨에서 enum 정의)
+  // 파싱 옵션 — JSON으로 유연하게 저장 (필드 추가 시 마이그레이션 불필요)
+  // Java의 Map<String, Boolean>과 유사하나 Prisma Json 타입으로 스키마 변경 없이 확장 가능
+  parseOptions Json       @default("{}")
+  createdAt    DateTime   @default(now())
+
+  project  Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  versions ModuleVersion[]
+  apis     ApiEntry[]
+
+  @@unique([projectId, name]) // 프로젝트 내 모듈명 중복 불가
+}
+
+enum ModuleType {
+  AAR
+  JAR
+}
+
+// ─── 모듈 버전 ───────────────────────────────────────────────
+// 같은 모듈의 버전별 파싱 이력
+// 경로 기반으로 변경: filePath → 실제 파일 경로, dirPath → 스캔한 폴더 경로
+model ModuleVersion {
+  id         String   @id @default(cuid())
+  moduleId   String
+  version    String   // ex) "1.0.0", "2.3.1"
+  filePath   String   // 파싱된 실제 파일 경로 (AAR/JAR)
+  dirPath    String?  // 스캔 기준 폴더 경로 (재파싱용)
+  parsedAt   DateTime @default(now())
+
+  module       Module        @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  apiSnapshots ApiSnapshot[]
+
+  @@unique([moduleId, version]) // 같은 버전 중복 불가
+}
+
+// ─── API 엔트리 ──────────────────────────────────────────────
+// 파싱된 Public API 목록 (모듈의 최신 상태 기준)
+model ApiEntry {
+  id             String   @id @default(cuid())
+  moduleId       String
+  className      String
+  methodName     String
+  // JSON 배열로 파라미터 타입 저장: ["String", "int", "Context"]
+  // Java와 달리 TypeScript/Prisma는 Json 타입으로 유연하게 저장
+  params         Json     @default("[]")
+  returnType     String
+  accessModifier String   @default("public") // public, public static
+  isStatic       Boolean  @default(false)
+  isDeprecated   Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  module          Module        @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  snapshots       ApiSnapshot[]
+  coverages       Coverage[]
+  recommendations Recommendation[]
+
+  @@unique([moduleId, className, methodName, params]) // 시그니처 중복 불가
+  @@index([moduleId])
+}
+
+// ─── API 스냅샷 ──────────────────────────────────────────────
+// 버전별 API 상태 기록 (Diff 비교용)
+model ApiSnapshot {
+  id              String     @id @default(cuid())
+  moduleVersionId String
+  apiEntryId      String
+  changeType      ChangeType @default(SAME) // ADDED | REMOVED | MODIFIED | SAME
+
+  moduleVersion ModuleVersion @relation(fields: [moduleVersionId], references: [id], onDelete: Cascade)
+  apiEntry      ApiEntry      @relation(fields: [apiEntryId], references: [id], onDelete: Cascade)
+
+  @@unique([moduleVersionId, apiEntryId])
+}
+
+enum ChangeType {
+  ADDED
+  REMOVED
+  MODIFIED
+  SAME
+}
+
+// ─── 테스트 스위트 ────────────────────────────────────────────
+// TC 프로젝트 단위 (경로 기반 스캔)
+// dirPath 저장으로 "재파싱" 기능 지원
+model TestSuite {
+  id        String     @id @default(cuid())
+  name      String
+  language  TcLanguage
+  dirPath   String     // TC 루트 경로 (재파싱용) ex) "D:/project/src/test"
+  parsedAt  DateTime   @default(now())
+
+  testCases TestCase[]
+}
+
+enum TcLanguage {
+  JAVA
+  KOTLIN
+}
+
+// ─── 테스트 케이스 ────────────────────────────────────────────
+// 개별 TC 파일 또는 메서드 단위
+model TestCase {
+  id         String   @id @default(cuid())
+  suiteId    String
+  name       String   // 테스트 메서드명 또는 파일명
+  filePath   String
+  content    String   // 파일 전체 텍스트 (파싱 원본)
+  // 호출된 API 시그니처 목록: ["DeviceManager.getSerial", "NetworkManager.ping"]
+  calledApis Json     @default("[]")
+  createdAt  DateTime @default(now())
+
+  suite     TestSuite  @relation(fields: [suiteId], references: [id], onDelete: Cascade)
+  coverages Coverage[]
+}
+
+// ─── 커버리지 ─────────────────────────────────────────────────
+// ApiEntry ↔ TestCase 매핑 결과
+model Coverage {
+  id         String         @id @default(cuid())
+  apiId      String
+  testCaseId String
+  status     CoverageStatus @default(COVERED)
+  createdAt  DateTime       @default(now())
+
+  api      ApiEntry @relation(fields: [apiId], references: [id], onDelete: Cascade)
+  testCase TestCase @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
+
+  @@unique([apiId, testCaseId])
+}
+
+enum CoverageStatus {
+  COVERED
+  PARTIAL
+  UNCOVERED
+}
+
+// ─── AI 추천 TC ───────────────────────────────────────────────
+// Claude API가 생성한 TC 추천 내용
+model Recommendation {
+  id                String   @id @default(cuid())
+  apiId             String
+  suggestedTestName String
+  scenario          String   // 테스트 시나리오 설명
+  reasoning         String   // 추천 이유
+  sampleCode        String?  // 샘플 코드 (선택)
+  generatedAt       DateTime @default(now())
+
+  api ApiEntry @relation(fields: [apiId], references: [id], onDelete: Cascade)
+}
+
+// ─── Property 명세서 (확장 예정 - Phase N) ───────────────────
+// 엑셀 파일 기반 Property 명세서 파싱 결과
+// model PropertySpec {
+//   id           String   @id @default(cuid())
+//   moduleId     String
+//   propertyName String
+//   type         String
+//   description  String?
+//   sourceFile   String   // 원본 엑셀 파일 경로
+//   createdAt    DateTime @default(now())
+// }
